@@ -690,6 +690,23 @@ def test_learning_curve_splitter_metadata():
         assert meta["permutation"] is not None
 
 
+def test_learning_curve_on_few_trials_clip():
+    y = np.array([0, 1] * 45)  # 36 per class in the training pool
+    splitter = LearningCurveSplitter(
+        data_size={"policy": "per_class", "value": [10, 40]},
+        n_perms=1,
+        test_size=0.2,
+        random_state=0,
+        on_few_trials="clip",
+    )
+    with pytest.warns(UserWarning, match="Clipping 40 per class to 36"):
+        sizes = [
+            (splitter.get_metadata()["data_size_value"], len(train))
+            for train, _ in splitter.split(np.arange(len(y)), y)
+        ]
+    assert sizes == [(10, 20), (40, 72)]
+
+
 def test_learning_curve_subsample_is_random_with_groups():
     """Each permutation must draw its own training set when groups are passed.
 

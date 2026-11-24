@@ -1177,6 +1177,10 @@ class LearningCurveSplitter(GroupsConsumerMixin, BaseCrossValidator):
         ``RandomState`` is stateful and advances only as its base folds are
         consumed. ``None`` uses NumPy's process-global random state. Defaults
         to ``None``.
+    on_few_trials : str
+        ``"raise"`` or ``"clip"``: what a ``per_class`` size above the smallest
+        class does. ``"clip"`` lowers it to the smallest class and warns; the
+        requested size stays in ``data_size_value``. Defaults to ``"raise"``.
 
     Attributes
     ----------
@@ -1215,7 +1219,8 @@ class LearningCurveSplitter(GroupsConsumerMixin, BaseCrossValidator):
     """
 
     VALID_POLICIES = ["per_class", "ratio"]
-    metadata_columns = ("data_size", "permutation")
+    # Append only: Results truncates new rows to an existing file's columns.
+    metadata_columns = ("data_size", "permutation", "data_size_value")
 
     def __init__(
         self,
@@ -1226,10 +1231,12 @@ class LearningCurveSplitter(GroupsConsumerMixin, BaseCrossValidator):
         # The following are accepted but not used (for compatibility with parent splitters)
         n_splits: Optional[int] = None,
         shuffle: bool = True,
+        on_few_trials: str = "raise",
     ):
         self.data_size = data_size
         self.test_size = test_size
         self.random_state = random_state
+        self.on_few_trials = on_few_trials
 
         # Validate and process data_size
         if data_size is None:
@@ -1276,6 +1283,7 @@ class LearningCurveSplitter(GroupsConsumerMixin, BaseCrossValidator):
         # Store metadata about current split (updated during iteration)
         self._current_perm = None
         self._current_data_size = None
+        self._current_data_size_value = None
 
     def get_n_splits(self, X=None, y=None, groups=None):
         """Return total number of splits.
@@ -1331,6 +1339,9 @@ class LearningCurveSplitter(GroupsConsumerMixin, BaseCrossValidator):
                 )
             indices = []
             for ds in self.data_size["value"]:
+                if self.on_few_trials == "clip" and ds > n_smallest_class:
+                    warn(f"Clipping {ds} per class to {n_smallest_class}.", stacklevel=2)
+                    ds = n_smallest_class
                 if ds > n_smallest_class:
                     raise ValueError(
                         f"Smallest class has {n_smallest_class} samples. "
@@ -1432,6 +1443,7 @@ class LearningCurveSplitter(GroupsConsumerMixin, BaseCrossValidator):
                 # Update current split metadata
                 self._current_perm = perm_i + 1  # 1-indexed for user display
                 self._current_data_size = len(subset_indices)
+                self._current_data_size_value = self.data_size["value"][di]
 
                 yield train_idx, test_idx
 
@@ -1441,10 +1453,14 @@ class LearningCurveSplitter(GroupsConsumerMixin, BaseCrossValidator):
         Returns
         -------
         metadata : dict
-            Dictionary with 'permutation' and 'data_size' keys.
+            Dictionary with 'permutation', 'data_size' and 'data_size_value' keys.
             Only valid during or after iteration.
         """
-        return {"permutation": self._current_perm, "data_size": self._current_data_size}
+        return {
+            "permutation": self._current_perm,
+            "data_size": self._current_data_size,
+            "data_size_value": self._current_data_size_value,
+        }
 
 
 class PurgedEpochKFold(GroupsConsumerMixin, BaseCrossValidator):

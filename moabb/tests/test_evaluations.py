@@ -669,9 +669,10 @@ class TestWithinSessLearningCurve:
             )
         )
         keys = results[0].keys()
-        assert len(keys) == _expected_result_key_count(extra_columns=2)
+        assert len(keys) == _expected_result_key_count(extra_columns=3)
         assert "permutation" in keys
         assert "data_size" in keys
+        assert "data_size_value" in keys
 
     def test_all_policies_work(self):
         kwargs = {
